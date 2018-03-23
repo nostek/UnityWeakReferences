@@ -8,12 +8,20 @@ public class EditorUnityWeakReferenceDrawer : PropertyDrawer
 	{
 		var obj = PropertyPath(property, fieldInfo);
 
-		var weakType = default(System.Type);
+		var weakType = typeof(UnityEngine.GameObject);
 
 		if (obj is System.Collections.IList)
-			weakType = (((obj as System.Collections.IList)[0]) as UnityWeakReference).GetWeakType();
+		{
+			var list = (obj as System.Collections.IList);
+			if (list.Count > 0)
+				weakType = (list[0] as UnityWeakReference).GetWeakType();
+		}
 		else if (obj.GetType().IsArray)
-			weakType = ((UnityWeakReference[])obj)[0].GetWeakType();
+		{
+			var arr = (UnityWeakReference[])obj;
+			if (arr.Length > 0)
+				weakType = arr[0].GetWeakType();
+		}
 		else
 			weakType = ((UnityWeakReference)obj).GetWeakType();
 
