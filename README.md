@@ -1,8 +1,6 @@
 # UnityWeakReferences
 Hard references to prefabs are converted to weak references at build time.
 
-## WORK IN PROGRESS
-
 ### Installation
 Copy the UnityWeakReference folder in to your project. Use WeakPrefab/WeakSprite/WeakTexture2D/WeakAudioClip in your MonoBehaviour/Array/List/Custom Class and fill out the field in the editor. All set!
 
