@@ -6,11 +6,14 @@ using UnityEngine.SceneManagement;
 
 public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, IPostprocessBuild
 {
+	const int MaxDepth = 5;
+
 	enum DoWorkState
 	{
 		OnPreprocessBuild,
 		OnProcessScene,
-		OnPostprocessBuild
+		OnPostprocessBuild,
+		DoNothing
 	}
 
 	public int callbackOrder { get { return 0; } }
@@ -111,12 +114,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 
 	static void DoWork(UnityEngine.Object obj, DoWorkState state, bool sceneObjects, List<string> guidsToCopy)
 	{
-		var fields = obj.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.FlattenHierarchy);
-
-		bool haveWeakUnityReference = false;
-		foreach (var f in fields)
-			if (f.FieldType.IsSubclassOf(typeof(UnityWeakReference)))
-				haveWeakUnityReference = true;
+		bool haveWeakUnityReference = ProcessWork(obj, DoWorkState.DoNothing, sceneObjects, guidsToCopy, 0);
 
 		if (state == DoWorkState.OnPreprocessBuild && haveWeakUnityReference && obj is IUnityWeakReferenceCallbacks)
 			(obj as IUnityWeakReferenceCallbacks).OnWeakUnityReferenceGenerate();
@@ -124,78 +122,164 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 		if (state == DoWorkState.OnProcessScene && haveWeakUnityReference && obj is IUnityWeakReferenceCallbacks)
 			(obj as IUnityWeakReferenceCallbacks).OnWeakUnityReferenceProcessScene(Application.isPlaying);
 
-		foreach (var f in fields)
-		{
-			if (f.FieldType.IsSubclassOf(typeof(UnityWeakReference)))
-			{
-				UnityWeakReference p = (UnityWeakReference)f.GetValue(obj);
-				var pf = p.GetType().BaseType.GetField("reference", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.FlattenHierarchy);
-				var pg = p.GetType().BaseType.GetField("assetGuid", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.FlattenHierarchy);
-				var pp = p.GetType().BaseType.GetField("path", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.FlattenHierarchy);
-				var pt = p.GetWeakType();
+		bool changed = ProcessWork(obj, state, sceneObjects, guidsToCopy, 0);
 
-				if (state == DoWorkState.OnPreprocessBuild)
-				{
-					UnityEngine.Object pgo = pf.GetValue(p) as UnityEngine.Object;
-
-					if (pgo != null)
-					{
-						var path = AssetDatabase.GetAssetPath(pgo);
-						var guid = AssetDatabase.AssetPathToGUID(path);
-
-						if (!guidsToCopy.Contains(guid))
-							guidsToCopy.Add(guid);
-
-						if (!sceneObjects)
-						{
-							pp.SetValue(p, FilePath(guid));
-							pg.SetValue(p, guid);
-							pf.SetValue(p, null);
-						}
-
-						UnityEditor.EditorUtility.SetDirty(obj);
-					}
-				}
-
-				if (state == DoWorkState.OnProcessScene && sceneObjects && !Application.isPlaying)
-				{
-					UnityEngine.Object pgo = pf.GetValue(p) as UnityEngine.Object;
-
-					if (pgo != null)
-					{
-						var path = AssetDatabase.GetAssetPath(pgo);
-						var guid = AssetDatabase.AssetPathToGUID(path);
-
-						pp.SetValue(p, FilePath(guid));
-						pg.SetValue(p, guid);
-						pf.SetValue(p, null);
-					}
-				}
-
-				if (state == DoWorkState.OnPostprocessBuild)
-				{
-					string guid = pg.GetValue(p) as string;
-
-					if (guid != null)
-					{
-						var path = AssetDatabase.GUIDToAssetPath(guid);
-						var prefab = AssetDatabase.LoadAssetAtPath(path, pt);
-
-						if (!sceneObjects)
-						{
-							pf.SetValue(p, prefab);
-							pp.SetValue(p, null);
-							pg.SetValue(p, null);
-						}
-
-						UnityEditor.EditorUtility.SetDirty(obj);
-					}
-				}
-			}
-		}
+		if (changed)
+			UnityEditor.EditorUtility.SetDirty(obj);
 
 		if (state == DoWorkState.OnPostprocessBuild && haveWeakUnityReference && obj is IUnityWeakReferenceCallbacks)
 			(obj as IUnityWeakReferenceCallbacks).OnWeakUnityReferenceRestore();
+	}
+
+	static bool ProcessWork(System.Object obj, DoWorkState state, bool sceneObjects, List<string> guidsToCopy, int depth)
+	{
+		if (depth > MaxDepth)
+			return false;
+
+		bool changed = false;
+
+		if (obj is UnityWeakReference)
+		{
+			ProcessWeakReference(obj as UnityWeakReference, state, sceneObjects, guidsToCopy);
+		}
+
+		var fields = obj.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+
+		foreach (var f in fields)
+		{
+			if (f.FieldType.IsArray)
+			{
+				var o = f.GetValue(obj);
+
+				if (o == null)
+					continue;
+
+				System.Array a = (System.Array)o;
+
+				for (int ai = 0; ai < a.Length; ai++)
+				{
+					var ao = a.GetValue(ai);
+
+					if (ao == null)
+						continue;
+
+					if (!ao.GetType().IsSerializable)
+						continue;
+
+					if (!ao.GetType().IsVisible)
+						continue;
+
+					if (ao.GetType().IsPrimitive)
+						continue;
+
+					if (ao.GetType().IsValueType)
+						continue;
+
+					changed = ProcessWork(ao, state, sceneObjects, guidsToCopy, depth + 1) || changed;
+				}
+
+				continue;
+			}
+
+			if (f.FieldType.IsClass)
+			{
+				var o = f.GetValue(obj);
+
+				if (o == null)
+					continue;
+
+				if (!o.GetType().IsSerializable)
+					continue;
+
+				if (!o.GetType().IsVisible)
+					continue;
+
+				if (o.GetType().IsPrimitive)
+					continue;
+
+				if (o.GetType().IsValueType)
+					continue;
+
+				changed = ProcessWork(o, state, sceneObjects, guidsToCopy, depth + 1) || changed;
+
+				continue;
+			}
+		}
+
+		return changed;
+	}
+
+	static bool ProcessWeakReference(UnityWeakReference p, DoWorkState state, bool sceneObjects, List<string> guidsToCopy)
+	{
+		bool changed = false;
+
+		var pf = p.GetType().BaseType.GetField("reference", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+		var pg = p.GetType().BaseType.GetField("assetGuid", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+		var pp = p.GetType().BaseType.GetField("path", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+		var pt = p.GetWeakType();
+
+		if (state == DoWorkState.DoNothing)
+			changed = true;
+
+		if (state == DoWorkState.OnPreprocessBuild)
+		{
+			UnityEngine.Object pgo = pf.GetValue(p) as UnityEngine.Object;
+
+			if (pgo != null)
+			{
+				var path = AssetDatabase.GetAssetPath(pgo);
+				var guid = AssetDatabase.AssetPathToGUID(path);
+
+				if (!guidsToCopy.Contains(guid))
+					guidsToCopy.Add(guid);
+
+				if (!sceneObjects)
+				{
+					pp.SetValue(p, FilePath(guid));
+					pg.SetValue(p, guid);
+					pf.SetValue(p, null);
+				}
+
+				changed = true;
+			}
+		}
+
+		if (state == DoWorkState.OnProcessScene && sceneObjects && !Application.isPlaying)
+		{
+			UnityEngine.Object pgo = pf.GetValue(p) as UnityEngine.Object;
+
+			if (pgo != null)
+			{
+				var path = AssetDatabase.GetAssetPath(pgo);
+				var guid = AssetDatabase.AssetPathToGUID(path);
+
+				pp.SetValue(p, FilePath(guid));
+				pg.SetValue(p, guid);
+				pf.SetValue(p, null);
+			}
+		}
+
+		if (state == DoWorkState.OnPostprocessBuild)
+		{
+			string guid = pg.GetValue(p) as string;
+
+			if (guid != null)
+			{
+				var path = AssetDatabase.GUIDToAssetPath(guid);
+				var prefab = AssetDatabase.LoadAssetAtPath(path, pt);
+
+				if (!sceneObjects)
+				{
+					pf.SetValue(p, prefab);
+					pp.SetValue(p, null);
+					pg.SetValue(p, null);
+				}
+
+				changed = true;
+			}
+		}
+
+		return changed;
 	}
 
 	static void PrepareFolder(bool create = true)
