@@ -93,3 +93,24 @@ public sealed class WeakTexture2D : UnityWeakReference
 		}
 	}
 }
+
+[System.Serializable]
+public sealed class WeakAudioClip : UnityWeakReference
+{
+	public override System.Type GetWeakType()
+	{
+		return typeof(AudioClip);
+	}
+
+	public AudioClip AudioClip
+	{
+		set
+		{
+			SetObject(value);
+		}
+		get
+		{
+			return Get<AudioClip>();
+		}
+	}
+}
