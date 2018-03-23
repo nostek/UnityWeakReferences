@@ -140,7 +140,9 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 
 		if (obj is UnityWeakReference)
 		{
-			ProcessWeakReference(obj as UnityWeakReference, state, sceneObjects, guidsToCopy);
+			changed = ProcessWeakReference(obj as UnityWeakReference, state, sceneObjects, guidsToCopy) || changed;
+
+			return changed;
 		}
 
 		var fields = obj.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
