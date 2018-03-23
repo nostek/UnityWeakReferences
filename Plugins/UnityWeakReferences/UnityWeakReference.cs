@@ -72,3 +72,24 @@ public sealed class WeakSprite : UnityWeakReference
 		}
 	}
 }
+
+[System.Serializable]
+public sealed class WeakTexture2D : UnityWeakReference
+{
+	public override System.Type GetWeakType()
+	{
+		return typeof(Texture2D);
+	}
+
+	public Texture2D Texture
+	{
+		set
+		{
+			SetObject(value);
+		}
+		get
+		{
+			return Get<Texture2D>();
+		}
+	}
+}
