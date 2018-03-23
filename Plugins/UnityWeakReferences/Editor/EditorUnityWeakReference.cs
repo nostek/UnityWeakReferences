@@ -228,14 +228,14 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 
 			if (src.StartsWith("Assets/Resources/"))
 			{
-				Debug.LogFormat("[WeakUnityReference] Do not need to copy: {0}", src);
+				Debug.LogFormat("[UnityWeakReference] Do not need to copy: {0}", src);
 				return;
 			}
 
 			string ext = src.Substring(src.LastIndexOf("."));
 			string dest = "Assets/Resources/_GeneratedWeaks_/" + guid + "_" + FilterPath(src) + ext;
 
-			Debug.LogFormat("[WeakUnityReference] Copy {0} -> {1}", src, dest);
+			Debug.LogFormat("[UnityWeakReference] Copy {0} -> {1}", src, dest);
 
 			AssetDatabase.CopyAsset(src, dest);
 			AssetDatabase.ImportAsset(dest, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
@@ -253,7 +253,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 				string path = src.Substring(("Assets/Resources/").Length);
 				path = path.Substring(0, path.LastIndexOf("."));
 
-				Debug.LogFormat("[WeakUnityReference] Will use path: {0}", path);
+				Debug.LogFormat("[UnityWeakReference] Will use path: {0}", path);
 
 				return path;
 			}
