@@ -14,8 +14,6 @@ public abstract class UnityWeakReference
 	string assetGuid = null;
 #pragma warning restore
 
-	public abstract System.Type GetWeakType();
-
 	protected void SetObject(UnityEngine.Object reference)
 	{
 		this.reference = reference;
@@ -32,13 +30,9 @@ public abstract class UnityWeakReference
 }
 
 [System.Serializable]
+[UnityWeakReferenceType(typeof(GameObject))]
 public sealed class WeakPrefab : UnityWeakReference
 {
-	public override System.Type GetWeakType()
-	{
-		return typeof(GameObject);
-	}
-
 	public GameObject Prefab
 	{
 		set
@@ -53,13 +47,9 @@ public sealed class WeakPrefab : UnityWeakReference
 }
 
 [System.Serializable]
+[UnityWeakReferenceType(typeof(Sprite))]
 public sealed class WeakSprite : UnityWeakReference
 {
-	public override System.Type GetWeakType()
-	{
-		return typeof(Sprite);
-	}
-
 	public Sprite Sprite
 	{
 		set
@@ -74,13 +64,9 @@ public sealed class WeakSprite : UnityWeakReference
 }
 
 [System.Serializable]
+[UnityWeakReferenceType(typeof(Texture2D))]
 public sealed class WeakTexture2D : UnityWeakReference
 {
-	public override System.Type GetWeakType()
-	{
-		return typeof(Texture2D);
-	}
-
 	public Texture2D Texture
 	{
 		set
@@ -95,13 +81,9 @@ public sealed class WeakTexture2D : UnityWeakReference
 }
 
 [System.Serializable]
+[UnityWeakReferenceType(typeof(AudioClip))]
 public sealed class WeakAudioClip : UnityWeakReference
 {
-	public override System.Type GetWeakType()
-	{
-		return typeof(AudioClip);
-	}
-
 	public AudioClip AudioClip
 	{
 		set

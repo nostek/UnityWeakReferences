@@ -218,7 +218,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 		var pf = p.GetType().BaseType.GetField("reference", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 		var pg = p.GetType().BaseType.GetField("assetGuid", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 		var pp = p.GetType().BaseType.GetField("path", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-		var pt = p.GetWeakType();
+		var pt = (p.GetType().GetCustomAttributes(typeof(UnityWeakReferenceType), false)[0] as UnityWeakReferenceType).Type;
 
 		if (state == DoWorkState.DoNothing)
 			changed = true;
