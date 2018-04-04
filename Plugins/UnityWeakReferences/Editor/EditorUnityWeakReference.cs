@@ -168,9 +168,6 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 					if (!ao.GetType().IsSerializable)
 						continue;
 
-					if (!ao.GetType().IsVisible)
-						continue;
-
 					if (ao.GetType().IsPrimitive)
 						continue;
 
@@ -191,9 +188,6 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 					continue;
 
 				if (!o.GetType().IsSerializable)
-					continue;
-
-				if (!o.GetType().IsVisible)
 					continue;
 
 				if (o.GetType().IsPrimitive)
