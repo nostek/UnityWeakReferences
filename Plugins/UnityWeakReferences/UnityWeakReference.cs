@@ -22,10 +22,13 @@ public abstract class UnityWeakReference
 	protected T_Class Get<T_Class>()
 		where T_Class : UnityEngine.Object
 	{
-		if (reference == null && path != null)
-			reference = Resources.Load<T_Class>(path);
+		if (reference != null)
+			return (T_Class)reference;
 
-		return (T_Class)reference;
+		if (path != null)
+			return Resources.Load<T_Class>(path);
+
+		return null;
 	}
 }
 
