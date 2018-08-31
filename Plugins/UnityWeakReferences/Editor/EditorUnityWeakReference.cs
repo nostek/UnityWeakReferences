@@ -3,8 +3,9 @@ using UnityEngine;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEngine.SceneManagement;
+using UnityEditor.Build.Reporting;
 
-public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, IPostprocessBuild
+public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProcessSceneWithReport, IPostprocessBuildWithReport
 {
 	const int MaxDepth = 5;
 
@@ -18,7 +19,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 
 	public int callbackOrder { get { return 0; } }
 
-	public void OnPreprocessBuild(BuildTarget target, string pathToBuild)
+	public void OnPreprocessBuild(BuildReport report)
 	{
 		PrepareFolder();
 
@@ -57,16 +58,19 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 
 		foreach (var g in guidsToCopy)
 			CopyFile(g);
+
+		AssetDatabase.SaveAssets();
+		AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
 	}
 
-	public void OnProcessScene(Scene scene)
+	public void OnProcessScene(Scene scene, BuildReport report)
 	{
 		var objs = scene.GetRootGameObjects();
 		foreach (var go in objs)
 			DoWork(go, DoWorkState.OnProcessScene, true, null);
 	}
 
-	public void OnPostprocessBuild(BuildTarget target, string pathToBuild)
+	public void OnPostprocessBuild(BuildReport report)
 	{
 		var guids = AssetDatabase.FindAssets("t:Prefab");
 		foreach (var g in guids)
@@ -109,7 +113,12 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 		var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
 
 		foreach (var b in behaviours)
+		{
+			if (b == null)
+				continue;
+
 			DoWork(b, state, sceneObjects, guidsToCopy);
+		}
 	}
 
 	static void DoWork(UnityEngine.Object obj, DoWorkState state, bool sceneObjects, List<string> guidsToCopy)
@@ -302,24 +311,20 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 
 	static void CopyFile(string guid)
 	{
-		if (!string.IsNullOrEmpty(guid))
-		{
-			string src = AssetDatabase.GUIDToAssetPath(guid);
+		if (string.IsNullOrEmpty(guid))
+			return;
 
-			if (src.StartsWith("Assets/Resources/"))
-			{
-				Debug.LogFormat("[UnityWeakReference] Do not need to copy: {0}", src);
-				return;
-			}
+		string src = AssetDatabase.GUIDToAssetPath(guid);
+		string dest = "Assets/Resources/_GeneratedWeaks_/" + guid + "_" + FilterPath(src) + ".asset";
 
-			string ext = src.Substring(src.LastIndexOf("."));
-			string dest = "Assets/Resources/_GeneratedWeaks_/" + guid + "_" + FilterPath(src) + ext;
+		var obj = AssetDatabase.LoadMainAssetAtPath(src);
 
-			Debug.LogFormat("[UnityWeakReference] Copy {0} -> {1}", src, dest);
+		var so = ScriptableObject.CreateInstance<UnityWeakReferenceScriptableObject>();
+		so.UnityObject = obj;
 
-			AssetDatabase.CopyAsset(src, dest);
-			AssetDatabase.ImportAsset(dest, ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
-		}
+		Debug.LogFormat("[UnityWeakReference] Created {0} -> {1}", src, dest);
+
+		AssetDatabase.CreateAsset(so, dest);
 	}
 
 	static string FilePath(string guid)
@@ -327,16 +332,6 @@ public sealed class EditorUnityWeakReference : IPreprocessBuild, IProcessScene, 
 		if (!string.IsNullOrEmpty(guid))
 		{
 			string src = AssetDatabase.GUIDToAssetPath(guid);
-
-			if (src.StartsWith("Assets/Resources/"))
-			{
-				string path = src.Substring(("Assets/Resources/").Length);
-				path = path.Substring(0, path.LastIndexOf("."));
-
-				Debug.LogFormat("[UnityWeakReference] Will use path: {0}", path);
-
-				return path;
-			}
 
 			return "_GeneratedWeaks_/" + guid + "_" + FilterPath(src);
 		}

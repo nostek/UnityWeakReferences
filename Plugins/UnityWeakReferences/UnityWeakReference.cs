@@ -26,7 +26,7 @@ public abstract class UnityWeakReference
 			return (T_Class)reference;
 
 		if (path != null)
-			return Resources.Load<T_Class>(path);
+			return (T_Class)Resources.Load<UnityWeakReferenceScriptableObject>(path).UnityObject;
 
 		return null;
 	}
