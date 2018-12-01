@@ -110,19 +110,20 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 	static void DoWork(GameObject go, DoWorkState state, bool sceneObjects, List<string> guidsToCopy)
 	{
+		if (go == null)
+			return;
+
 		var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
 
 		foreach (var b in behaviours)
-		{
-			if (b == null)
-				continue;
-
 			DoWork(b, state, sceneObjects, guidsToCopy);
-		}
 	}
 
 	static void DoWork(UnityEngine.Object obj, DoWorkState state, bool sceneObjects, List<string> guidsToCopy)
 	{
+		if (obj == null)
+			return;
+
 		bool haveWeakUnityReference = ProcessWork(obj, DoWorkState.DoNothing, sceneObjects, guidsToCopy, 0);
 
 		if (state == DoWorkState.OnPreprocessBuild && haveWeakUnityReference && obj is IUnityWeakReferenceCallbacks)
