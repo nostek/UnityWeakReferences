@@ -25,9 +25,15 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 	public int callbackOrder { get { return 0; } }
 
+	static Dictionary<string, byte[]> fileBackups = null;
+
 	public void OnPreprocessBuild(BuildReport report)
 	{
 		PrepareFolder();
+
+		string projectPath = Application.dataPath.Replace("/Assets", "");
+
+		fileBackups = new Dictionary<string, byte[]>();
 
 		Dictionary<string, AssetInfo> assetsToReference = new Dictionary<string, AssetInfo>();
 
@@ -38,6 +44,10 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 			var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
 
 			bool changed = DoWork(go, DoWorkState.OnPreprocessBuild, false, assetsToReference);
+
+			if (changed)
+				if (!fileBackups.ContainsKey(guid))
+					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + "/" + path));
 		}
 
 		AssetDatabase.SaveAssets();
@@ -49,6 +59,10 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 			var so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
 
 			bool changed = DoWork(so, DoWorkState.OnPreprocessBuild, false, assetsToReference);
+
+			if (changed)
+				if (!fileBackups.ContainsKey(guid))
+					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + "/" + path));
 		}
 
 		AssetDatabase.SaveAssets();
@@ -83,38 +97,20 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 	public void OnPostprocessBuild(BuildReport report)
 	{
-		var guids = AssetDatabase.FindAssets("t:Prefab");
-		foreach (var g in guids)
+		string projectPath = Application.dataPath.Replace("/Assets", "");
+
+		foreach (var kvp in fileBackups)
 		{
-			var path = AssetDatabase.GUIDToAssetPath(g);
-			var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
-
-			DoWork(go, DoWorkState.OnPostprocessBuild, false, null);
-		}
-
-		guids = AssetDatabase.FindAssets("t:ScriptableObject");
-		foreach (var g in guids)
-		{
-			var path = AssetDatabase.GUIDToAssetPath(g);
-			var so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
-
-			DoWork(so, DoWorkState.OnPostprocessBuild, false, null);
+			var path = AssetDatabase.GUIDToAssetPath(kvp.Key);
+			System.IO.File.WriteAllBytes(projectPath + "/" + path, kvp.Value);
 		}
 
 		AssetDatabase.SaveAssets();
-
-		for (int i = 0; i < UnityEditor.SceneManagement.EditorSceneManager.sceneCountInBuildSettings; i++)
-		{
-			var scenePath = SceneUtility.GetScenePathByBuildIndex(i);
-
-			var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
-
-			var objs = scene.GetRootGameObjects();
-			foreach (var go in objs)
-				DoWork(go, DoWorkState.OnPostprocessBuild, true, null);
-		}
+		AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
 
 		PrepareFolder(false);
+
+		fileBackups = null;
 	}
 
 	/////////////////////
