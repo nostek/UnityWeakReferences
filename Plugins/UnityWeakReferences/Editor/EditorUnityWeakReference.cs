@@ -359,6 +359,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		path = path.Substring(0, path.LastIndexOf("."));
 		path = path.Replace('.', '_');
 		path = path.Replace('/', '_');
+		path = path.Replace(' ', '_');
 		return path;
 	}
 }
