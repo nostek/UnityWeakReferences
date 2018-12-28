@@ -15,7 +15,6 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		OnPreprocessBuild,
 		OnProcessScene,
 		OnPostprocessBuild,
-		DoNothing
 	}
 
 	struct AssetInfo
@@ -134,21 +133,11 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		if (obj == null)
 			return;
 
-		bool haveWeakUnityReference = ProcessWork(obj, DoWorkState.DoNothing, sceneObjects, assetsToCopy, 0);
-
-		if (state == DoWorkState.OnPreprocessBuild && haveWeakUnityReference && obj is IUnityWeakReferenceCallbacks)
-			(obj as IUnityWeakReferenceCallbacks).OnWeakUnityReferenceGenerate();
-
-		if (state == DoWorkState.OnProcessScene && haveWeakUnityReference && obj is IUnityWeakReferenceCallbacks)
-			(obj as IUnityWeakReferenceCallbacks).OnWeakUnityReferenceProcessScene(Application.isPlaying);
-
 		bool changed = ProcessWork(obj, state, sceneObjects, assetsToCopy, 0);
 
 		if (changed)
 			UnityEditor.EditorUtility.SetDirty(obj);
 
-		if (state == DoWorkState.OnPostprocessBuild && haveWeakUnityReference && obj is IUnityWeakReferenceCallbacks)
-			(obj as IUnityWeakReferenceCallbacks).OnWeakUnityReferenceRestore();
 	}
 
 	static bool ProcessWork(System.Object obj, DoWorkState state, bool sceneObjects, List<AssetInfo> assetsToCopy, int depth)
@@ -233,9 +222,6 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		var pg = p.GetType().BaseType.GetField("assetGuid", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 		var pp = p.GetType().BaseType.GetField("path", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
 		var pt = (p.GetType().GetCustomAttributes(typeof(UnityWeakReferenceType), false)[0] as UnityWeakReferenceType).Type;
-
-		if (state == DoWorkState.DoNothing)
-			changed = true;
 
 		if (state == DoWorkState.OnPreprocessBuild)
 		{
