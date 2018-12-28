@@ -31,7 +31,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 	{
 		PrepareFolder();
 
-		string projectPath = Application.dataPath.Replace("/Assets", "");
+        string projectPath = ProjectPath();
 
 		fileBackups = new Dictionary<string, byte[]>();
 
@@ -47,7 +47,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 			if (changed)
 				if (!fileBackups.ContainsKey(guid))
-					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + "/" + path));
+					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + path));
 		}
 
 		AssetDatabase.SaveAssets();
@@ -62,7 +62,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 			if (changed)
 				if (!fileBackups.ContainsKey(guid))
-					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + "/" + path));
+					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + path));
 		}
 
 		AssetDatabase.SaveAssets();
@@ -97,12 +97,12 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 	public void OnPostprocessBuild(BuildReport report)
 	{
-		string projectPath = Application.dataPath.Replace("/Assets", "");
+        string projectPath = ProjectPath();
 
 		foreach (var kvp in fileBackups)
 		{
 			var path = AssetDatabase.GUIDToAssetPath(kvp.Key);
-			System.IO.File.WriteAllBytes(projectPath + "/" + path, kvp.Value);
+			System.IO.File.WriteAllBytes(projectPath + path, kvp.Value);
 		}
 
 		AssetDatabase.SaveAssets();
@@ -349,4 +349,11 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		path = path.Replace(' ', '_');
 		return path;
 	}
+
+    static string ProjectPath()
+    {
+        string path = Application.dataPath;
+        const string pattern = @"([\\\/]Assets)$";
+        return System.Text.RegularExpressions.Regex.Replace(path, pattern, "/");
+    }
 }
