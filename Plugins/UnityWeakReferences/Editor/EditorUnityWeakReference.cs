@@ -11,6 +11,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 	enum DoWorkState
 	{
+		Invalid = 0,
 		OnPreprocessBuild,
 		OnProcessScene,
 		OnPostprocessBuild,
