@@ -56,6 +56,9 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		{
 			var scenePath = SceneUtility.GetScenePathByBuildIndex(i);
 
+			if (string.IsNullOrEmpty(scenePath))
+				continue;
+
 			var scene = UnityEditor.SceneManagement.EditorSceneManager.OpenScene(scenePath, UnityEditor.SceneManagement.OpenSceneMode.Single);
 
 			var objs = scene.GetRootGameObjects();
