@@ -29,24 +29,26 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 	{
 		PrepareFolder();
 
-		List<AssetInfo> assetsToCopy = new List<AssetInfo>();
+		Dictionary<string, AssetInfo> assetsToReference = new Dictionary<string, AssetInfo>();
 
 		var guids = AssetDatabase.FindAssets("t:Prefab");
-		foreach (var g in guids)
+		foreach (var guid in guids)
 		{
-			var path = AssetDatabase.GUIDToAssetPath(g);
+			var path = AssetDatabase.GUIDToAssetPath(guid);
 			var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
 
-			DoWork(go, DoWorkState.OnPreprocessBuild, false, assetsToCopy);
+			bool changed = DoWork(go, DoWorkState.OnPreprocessBuild, false, assetsToReference);
 		}
 
+		AssetDatabase.SaveAssets();
+
 		guids = AssetDatabase.FindAssets("t:ScriptableObject");
-		foreach (var g in guids)
+		foreach (var guid in guids)
 		{
-			var path = AssetDatabase.GUIDToAssetPath(g);
+			var path = AssetDatabase.GUIDToAssetPath(guid);
 			var so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
 
-			DoWork(so, DoWorkState.OnPreprocessBuild, false, assetsToCopy);
+			bool changed = DoWork(so, DoWorkState.OnPreprocessBuild, false, assetsToReference);
 		}
 
 		AssetDatabase.SaveAssets();
@@ -62,11 +64,11 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 			var objs = scene.GetRootGameObjects();
 			foreach (var go in objs)
-				DoWork(go, DoWorkState.OnPreprocessBuild, true, assetsToCopy);
+				DoWork(go, DoWorkState.OnPreprocessBuild, true, assetsToReference);
 		}
 
-		foreach (var a in assetsToCopy)
-			CopyFile(a);
+		foreach (var a in assetsToReference)
+			CreateReferenceFile(a.Value);
 
 		AssetDatabase.SaveAssets();
 		AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
@@ -117,30 +119,38 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 	/////////////////////
 
-	static void DoWork(GameObject go, DoWorkState state, bool sceneObjects, List<AssetInfo> assetsToCopy)
+	static bool DoWork(GameObject go, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference)
 	{
 		if (go == null)
-			return;
+			return false;
 
 		var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
 
+		bool changed = false;
+
 		foreach (var b in behaviours)
-			DoWork(b, state, sceneObjects, assetsToCopy);
+			changed = DoWork(b, state, sceneObjects, assetsToReference) || changed;
+
+		if (changed)
+			UnityEditor.EditorUtility.SetDirty(go);
+
+		return changed;
 	}
 
-	static void DoWork(UnityEngine.Object obj, DoWorkState state, bool sceneObjects, List<AssetInfo> assetsToCopy)
+	static bool DoWork(UnityEngine.Object obj, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference)
 	{
 		if (obj == null)
-			return;
+			return false;
 
-		bool changed = ProcessWork(obj, state, sceneObjects, assetsToCopy, 0);
+		bool changed = ProcessWork(obj, state, sceneObjects, assetsToReference, 0);
 
 		if (changed)
 			UnityEditor.EditorUtility.SetDirty(obj);
 
+		return changed;
 	}
 
-	static bool ProcessWork(System.Object obj, DoWorkState state, bool sceneObjects, List<AssetInfo> assetsToCopy, int depth)
+	static bool ProcessWork(System.Object obj, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference, int depth)
 	{
 		if (depth > MaxDepth)
 			return false;
@@ -149,7 +159,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 		if (obj is UnityWeakReference)
 		{
-			changed = ProcessWeakReference(obj as UnityWeakReference, state, sceneObjects, assetsToCopy) || changed;
+			changed = ProcessWeakReference(obj as UnityWeakReference, state, sceneObjects, assetsToReference) || changed;
 
 			return changed;
 		}
@@ -183,7 +193,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 					if (ao.GetType().IsValueType)
 						continue;
 
-					changed = ProcessWork(ao, state, sceneObjects, assetsToCopy, depth + 1) || changed;
+					changed = ProcessWork(ao, state, sceneObjects, assetsToReference, depth + 1) || changed;
 				}
 
 				continue;
@@ -205,7 +215,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 				if (o.GetType().IsValueType)
 					continue;
 
-				changed = ProcessWork(o, state, sceneObjects, assetsToCopy, depth + 1) || changed;
+				changed = ProcessWork(o, state, sceneObjects, assetsToReference, depth + 1) || changed;
 
 				continue;
 			}
@@ -214,7 +224,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		return changed;
 	}
 
-	static bool ProcessWeakReference(UnityWeakReference p, DoWorkState state, bool sceneObjects, List<AssetInfo> assetsToCopy)
+	static bool ProcessWeakReference(UnityWeakReference p, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference)
 	{
 		bool changed = false;
 
@@ -232,17 +242,8 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 				var path = AssetDatabase.GetAssetPath(pgo);
 				var guid = AssetDatabase.AssetPathToGUID(path);
 
-				//Check if already is in the list
-				bool found = false;
-				foreach (var a in assetsToCopy)
-					if (a.GUID == guid)
-					{
-						found = true;
-						break;
-					}
-
-				if (!found)
-					assetsToCopy.Add(new AssetInfo { GUID = guid, Type = pt });
+				if (!assetsToReference.ContainsKey(guid))
+					assetsToReference.Add(guid, new AssetInfo { GUID = guid, Type = pt });
 
 				if (!sceneObjects)
 				{
@@ -315,7 +316,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		}
 	}
 
-	static void CopyFile(AssetInfo info)
+	static void CreateReferenceFile(AssetInfo info)
 	{
 		if (string.IsNullOrEmpty(info.GUID))
 			return;
