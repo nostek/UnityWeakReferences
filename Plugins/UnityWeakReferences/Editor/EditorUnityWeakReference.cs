@@ -90,6 +90,10 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 	public void OnProcessScene(Scene scene, BuildReport report)
 	{
+		//Do not run this in play mode
+		if (!UnityEditor.BuildPipeline.isBuildingPlayer)
+			return;
+			
 		var objs = scene.GetRootGameObjects();
 		foreach (var go in objs)
 			DoWork(go, DoWorkState.OnProcessScene, true, null);
