@@ -5,35 +5,31 @@ using UnityEditor.Build;
 using UnityEngine.SceneManagement;
 using UnityEditor.Build.Reporting;
 
-public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProcessSceneWithReport, IPostprocessBuildWithReport
+public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IPostprocessBuildWithReport
 {
-	const int MaxDepth = 5;
-
-	enum DoWorkState
-	{
-		Invalid = 0,
-		OnPreprocessBuild,
-		OnProcessScene,
-		OnPostprocessBuild,
-	}
-
 	struct AssetInfo
 	{
 		public string GUID;
 		public System.Type Type;
+		public string Path;
 	}
 
 	public int callbackOrder { get { return 0; } }
-
-	static Dictionary<string, byte[]> fileBackups = null;
 
 	public void OnPreprocessBuild(BuildReport report)
 	{
 		PrepareFolder();
 
-        string projectPath = ProjectPath();
-
-		fileBackups = new Dictionary<string, byte[]>();
+		Dictionary<string, System.Type> validTypes = new Dictionary<string, System.Type>();
+		var types = System.Reflection.Assembly.GetAssembly(typeof(UnityWeakReference)).GetTypes();
+		foreach (var type in types)
+		{
+			if (type.IsClass && !type.IsAbstract && type.IsSubclassOf(typeof(UnityWeakReference)))
+			{
+				var otype = (type.GetCustomAttributes(typeof(UnityWeakReferenceType), false)[0] as UnityWeakReferenceType).Type;
+				validTypes.Add(type.Name, otype);
+			}
+		}
 
 		Dictionary<string, AssetInfo> assetsToReference = new Dictionary<string, AssetInfo>();
 
@@ -43,29 +39,21 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 			var path = AssetDatabase.GUIDToAssetPath(guid);
 			var go = AssetDatabase.LoadAssetAtPath<GameObject>(path);
 
-			bool changed = DoWork(go, DoWorkState.OnPreprocessBuild, false, assetsToReference);
-
-			if (changed)
-				if (!fileBackups.ContainsKey(guid))
-					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + path));
+			DoWork(go, assetsToReference, validTypes);
 		}
-
-		AssetDatabase.SaveAssets();
 
 		guids = AssetDatabase.FindAssets("t:ScriptableObject");
 		foreach (var guid in guids)
 		{
 			var path = AssetDatabase.GUIDToAssetPath(guid);
-			var so = AssetDatabase.LoadAssetAtPath<ScriptableObject>(path);
+			var sos = AssetDatabase.LoadAllAssetsAtPath(path);
 
-			bool changed = DoWork(so, DoWorkState.OnPreprocessBuild, false, assetsToReference);
-
-			if (changed)
-				if (!fileBackups.ContainsKey(guid))
-					fileBackups.Add(guid, System.IO.File.ReadAllBytes(projectPath + path));
+			foreach (var so in sos)
+				if (so is ScriptableObject)
+				{
+					DoWork(so, assetsToReference, validTypes);
+				}
 		}
-
-		AssetDatabase.SaveAssets();
 
 		for (int i = 0; i < UnityEditor.SceneManagement.EditorSceneManager.sceneCountInBuildSettings; i++)
 		{
@@ -78,7 +66,7 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 
 			var objs = scene.GetRootGameObjects();
 			foreach (var go in objs)
-				DoWork(go, DoWorkState.OnPreprocessBuild, true, assetsToReference);
+				DoWork(go, assetsToReference, validTypes);
 		}
 
 		foreach (var a in assetsToReference)
@@ -88,210 +76,50 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
 	}
 
-	public void OnProcessScene(Scene scene, BuildReport report)
-	{
-		//Do not run this in play mode
-		if (!UnityEditor.BuildPipeline.isBuildingPlayer)
-			return;
-			
-		var objs = scene.GetRootGameObjects();
-		foreach (var go in objs)
-			DoWork(go, DoWorkState.OnProcessScene, true, null);
-	}
-
 	public void OnPostprocessBuild(BuildReport report)
 	{
-        string projectPath = ProjectPath();
-
-		foreach (var kvp in fileBackups)
-		{
-			var path = AssetDatabase.GUIDToAssetPath(kvp.Key);
-			System.IO.File.WriteAllBytes(projectPath + path, kvp.Value);
-		}
-
-		AssetDatabase.SaveAssets();
-		AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
-
 		PrepareFolder(false);
-
-		fileBackups = null;
 	}
 
 	/////////////////////
 
-	static bool DoWork(GameObject go, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference)
+	static void DoWork(GameObject go, Dictionary<string, AssetInfo> assetsToReference, Dictionary<string, System.Type> validTypes)
 	{
 		if (go == null)
-			return false;
+			return;
 
 		var behaviours = go.GetComponentsInChildren<MonoBehaviour>(true);
 
-		bool changed = false;
-
 		foreach (var b in behaviours)
-			changed = DoWork(b, state, sceneObjects, assetsToReference) || changed;
-
-		if (changed)
-			UnityEditor.EditorUtility.SetDirty(go);
-
-		return changed;
+			DoWork(b, assetsToReference, validTypes);
 	}
 
-	static bool DoWork(UnityEngine.Object obj, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference)
+	static void DoWork(UnityEngine.Object obj, Dictionary<string, AssetInfo> assetsToReference, Dictionary<string, System.Type> validTypes)
 	{
 		if (obj == null)
-			return false;
+			return;
 
-		bool changed = ProcessWork(obj, state, sceneObjects, assetsToReference, 0);
-
-		if (changed)
-			UnityEditor.EditorUtility.SetDirty(obj);
-
-		return changed;
-	}
-
-	static bool ProcessWork(System.Object obj, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference, int depth)
-	{
-		if (depth > MaxDepth)
-			return false;
-
-		bool changed = false;
-
-		if (obj is UnityWeakReference)
+		var so = new SerializedObject(obj);
+		var itr = so.GetIterator();
+		while (itr.NextVisible(true))
 		{
-			changed = ProcessWeakReference(obj as UnityWeakReference, state, sceneObjects, assetsToReference) || changed;
-
-			return changed;
-		}
-
-		var fields = obj.GetType().GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-		foreach (var f in fields)
-		{
-			if (f.FieldType.IsArray)
+			if (itr.propertyType == SerializedPropertyType.Generic && !itr.isArray && validTypes.ContainsKey(itr.type))
 			{
-				var o = f.GetValue(obj);
+				var pref = itr.FindPropertyRelative("reference");
+				var pgo = pref.objectReferenceValue;
 
-				if (o == null)
+				if (pgo == null)
 					continue;
 
-				System.Array a = (System.Array)o;
+				var pt = validTypes[itr.type];
 
-				for (int ai = 0; ai < a.Length; ai++)
-				{
-					var ao = a.GetValue(ai);
-
-					if (ao == null)
-						continue;
-
-					if (!ao.GetType().IsSerializable)
-						continue;
-
-					if (ao.GetType().IsPrimitive)
-						continue;
-
-					if (ao.GetType().IsValueType)
-						continue;
-
-					changed = ProcessWork(ao, state, sceneObjects, assetsToReference, depth + 1) || changed;
-				}
-
-				continue;
-			}
-
-			if (f.FieldType.IsClass)
-			{
-				var o = f.GetValue(obj);
-
-				if (o == null)
-					continue;
-
-				if (!o.GetType().IsSerializable)
-					continue;
-
-				if (o.GetType().IsPrimitive)
-					continue;
-
-				if (o.GetType().IsValueType)
-					continue;
-
-				changed = ProcessWork(o, state, sceneObjects, assetsToReference, depth + 1) || changed;
-
-				continue;
-			}
-		}
-
-		return changed;
-	}
-
-	static bool ProcessWeakReference(UnityWeakReference p, DoWorkState state, bool sceneObjects, Dictionary<string, AssetInfo> assetsToReference)
-	{
-		bool changed = false;
-
-		var pf = p.GetType().BaseType.GetField("reference", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-		var pg = p.GetType().BaseType.GetField("assetGuid", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-		var pp = p.GetType().BaseType.GetField("path", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-		var pt = (p.GetType().GetCustomAttributes(typeof(UnityWeakReferenceType), false)[0] as UnityWeakReferenceType).Type;
-
-		if (state == DoWorkState.OnPreprocessBuild)
-		{
-			UnityEngine.Object pgo = pf.GetValue(p) as UnityEngine.Object;
-
-			if (pgo != null)
-			{
 				var path = AssetDatabase.GetAssetPath(pgo);
 				var guid = AssetDatabase.AssetPathToGUID(path);
 
 				if (!assetsToReference.ContainsKey(guid))
-					assetsToReference.Add(guid, new AssetInfo { GUID = guid, Type = pt });
-
-				if (!sceneObjects)
-				{
-					pp.SetValue(p, FilePath(guid));
-					pg.SetValue(p, guid);
-					pf.SetValue(p, null);
-				}
-
-				changed = true;
+					assetsToReference.Add(guid, new AssetInfo { GUID = guid, Type = pt, Path = path });
 			}
 		}
-
-		if (state == DoWorkState.OnProcessScene && sceneObjects && !Application.isPlaying)
-		{
-			UnityEngine.Object pgo = pf.GetValue(p) as UnityEngine.Object;
-
-			if (pgo != null)
-			{
-				var path = AssetDatabase.GetAssetPath(pgo);
-				var guid = AssetDatabase.AssetPathToGUID(path);
-
-				pp.SetValue(p, FilePath(guid));
-				pg.SetValue(p, guid);
-				pf.SetValue(p, null);
-			}
-		}
-
-		if (state == DoWorkState.OnPostprocessBuild)
-		{
-			string guid = pg.GetValue(p) as string;
-
-			if (guid != null)
-			{
-				var path = AssetDatabase.GUIDToAssetPath(guid);
-				var prefab = AssetDatabase.LoadAssetAtPath(path, pt);
-
-				if (!sceneObjects)
-				{
-					pf.SetValue(p, prefab);
-					pp.SetValue(p, null);
-					pg.SetValue(p, null);
-				}
-
-				changed = true;
-			}
-		}
-
-		return changed;
 	}
 
 	static void PrepareFolder(bool create = true)
@@ -321,8 +149,8 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		if (string.IsNullOrEmpty(info.GUID))
 			return;
 
-		string src = AssetDatabase.GUIDToAssetPath(info.GUID);
-		string dest = "Assets/Resources/_GeneratedWeaks_/" + info.GUID + "_" + FilterPath(src) + ".asset";
+		string src = info.Path;
+		string dest = string.Format("Assets/Resources/_GeneratedWeaks_/{0}_{1}.asset", info.GUID, FilterPath(src));
 
 		var obj = AssetDatabase.LoadAssetAtPath(src, info.Type);
 
@@ -334,17 +162,6 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		AssetDatabase.CreateAsset(so, dest);
 	}
 
-	static string FilePath(string guid)
-	{
-		if (!string.IsNullOrEmpty(guid))
-		{
-			string src = AssetDatabase.GUIDToAssetPath(guid);
-
-			return "_GeneratedWeaks_/" + guid + "_" + FilterPath(src);
-		}
-		return null;
-	}
-
 	static string FilterPath(string path)
 	{
 		path = path.Substring(0, path.LastIndexOf("."));
@@ -353,11 +170,4 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IProc
 		path = path.Replace(' ', '_');
 		return path;
 	}
-
-    static string ProjectPath()
-    {
-        string path = Application.dataPath;
-        const string pattern = @"([\\\/]Assets)$";
-        return System.Text.RegularExpressions.Regex.Replace(path, pattern, "/");
-    }
 }

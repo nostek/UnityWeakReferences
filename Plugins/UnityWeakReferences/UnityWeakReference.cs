@@ -1,10 +1,13 @@
 ﻿using UnityEngine;
 
+//Class need to be NOT abstract, otherwise the player will throw exceptions on #ifdef'ing out variables
 [System.Serializable]
-public abstract class UnityWeakReference
+public class UnityWeakReference : ISerializationCallbackReceiver
 {
+#if UNITY_EDITOR
 	[SerializeField]
 	UnityEngine.Object reference = null;
+#endif
 
 	[SerializeField]
 	string path = null;
@@ -12,18 +15,50 @@ public abstract class UnityWeakReference
 #pragma warning disable 0414
 	[SerializeField]
 	string assetGuid = null;
+
+	public void OnAfterDeserialize()
+	{
+	}
+
+	public void OnBeforeSerialize()
+	{
+#if UNITY_EDITOR
+		if (reference == null)
+		{
+			assetGuid = "";
+			path = "";
+		}
+		else
+		{
+			var p = UnityEditor.AssetDatabase.GetAssetPath(reference);
+			var g = UnityEditor.AssetDatabase.AssetPathToGUID(p);
+
+			assetGuid = g;
+
+			p = p.Substring(0, p.LastIndexOf("."));
+			p = p.Replace('.', '_');
+			p = p.Replace('/', '_');
+			p = p.Replace(' ', '_');
+			path = "_GeneratedWeaks_/" + g + "_" + p;
+		}
+#endif
+	}
 #pragma warning restore
 
-	protected void SetObject(UnityEngine.Object reference)
+#if UNITY_EDITOR
+	public void SetObject(UnityEngine.Object reference)
 	{
 		this.reference = reference;
 	}
+#endif
 
 	protected T_Class Get<T_Class>()
 		where T_Class : UnityEngine.Object
 	{
+#if UNITY_EDITOR
 		if (reference != null)
 			return (T_Class)reference;
+#endif
 
 		if (!string.IsNullOrEmpty(path))
 		{
@@ -41,10 +76,6 @@ public sealed class WeakPrefab : UnityWeakReference
 {
 	public GameObject Prefab
 	{
-		set
-		{
-			SetObject(value);
-		}
 		get
 		{
 			return Get<GameObject>();
@@ -58,10 +89,6 @@ public sealed class WeakSprite : UnityWeakReference
 {
 	public Sprite Sprite
 	{
-		set
-		{
-			SetObject(value);
-		}
 		get
 		{
 			return Get<Sprite>();
@@ -75,10 +102,6 @@ public sealed class WeakTexture2D : UnityWeakReference
 {
 	public Texture2D Texture
 	{
-		set
-		{
-			SetObject(value);
-		}
 		get
 		{
 			return Get<Texture2D>();
@@ -92,10 +115,6 @@ public sealed class WeakAudioClip : UnityWeakReference
 {
 	public AudioClip AudioClip
 	{
-		set
-		{
-			SetObject(value);
-		}
 		get
 		{
 			return Get<AudioClip>();
