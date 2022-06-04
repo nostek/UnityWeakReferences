@@ -138,7 +138,8 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IPost
 					for(int i = 0; i < itr.arraySize; i++)
                     			{
 						var element = itr.GetArrayElementAtIndex(i);
-						DoWork(element.serializedObject.targetObject, assetsToReference, validTypes);
+						if(element != null && element.serializedObject != null)
+							DoWork(element.serializedObject.targetObject, assetsToReference, validTypes);
 					}
 				}
 			}
