@@ -30,6 +30,9 @@ public class UnityWeakReference : ISerializationCallbackReceiver
 		}
 		else
 		{
+			if (UnityEditor.EditorApplication.isCompiling || UnityEditor.EditorApplication.isUpdating)
+				return;
+
 			var p = UnityEditor.AssetDatabase.GetAssetPath(reference);
 			var g = UnityEditor.AssetDatabase.AssetPathToGUID(p);
 
@@ -39,7 +42,7 @@ public class UnityWeakReference : ISerializationCallbackReceiver
 			p = p.Replace('.', '_');
 			p = p.Replace('/', '_');
 			p = p.Replace(' ', '_');
-			path = "_GeneratedWeaks_/" + g + "_" + p;
+			path = string.Format("_GeneratedWeaks_/{0}/{1}_{2}", g[0], g, p);
 		}
 #endif
 	}
@@ -58,15 +61,16 @@ public class UnityWeakReference : ISerializationCallbackReceiver
 #if UNITY_EDITOR
 		if (reference != null)
 			return (T_Class)reference;
-#endif
-
+#else
 		if (!string.IsNullOrEmpty(path))
 		{
 			var so = Resources.Load<UnityWeakReferenceScriptableObject>(path);
+			UnityEngine.Assertions.Assert.IsNotNull(so, $"Could not load Weak SO {path}");
 			return (T_Class)so.UnityObject;
 		}
+#endif
 
-		return null;
+		return default(T_Class);
 	}
 }
 
