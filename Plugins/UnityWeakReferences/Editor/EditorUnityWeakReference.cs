@@ -113,22 +113,35 @@ public sealed class EditorUnityWeakReference : IPreprocessBuildWithReport, IPost
 		var itr = so.GetIterator();
 		while (itr.NextVisible(true))
 		{
-			if (itr.propertyType == SerializedPropertyType.Generic && !itr.isArray && validTypes.ContainsKey(itr.type))
+			if (itr.propertyType == SerializedPropertyType.Generic && validTypes.ContainsKey(itr.type))
 			{
-				var pref = itr.FindPropertyRelative("reference");
-				var ppath = itr.FindPropertyRelative("path");
-				var pgo = pref.objectReferenceValue;
+				if(!itr.isArray)
+               			{
+					var pref = itr.FindPropertyRelative("reference");
+					var ppath = itr.FindPropertyRelative("path");
+					var pgo = pref.objectReferenceValue;
 
-				if (pgo == null)
-					continue;
+					if (pgo == null)
+						continue;
 
-				var path = AssetDatabase.GetAssetPath(pgo);
-				var guid = AssetDatabase.AssetPathToGUID(path);
+					var path = AssetDatabase.GetAssetPath(pgo);
+					var guid = AssetDatabase.AssetPathToGUID(path);
 
-				var pt = validTypes[itr.type];
+					var pt = validTypes[itr.type];
 
-				if (!assetsToReference.ContainsKey(guid))
-					assetsToReference.Add(guid, new AssetInfo { GUID = guid, Path = path, WeakPath = ppath.stringValue, Type = pt });
+					if (!assetsToReference.ContainsKey(guid))
+						assetsToReference.Add(guid, new AssetInfo { GUID = guid, Path = path, WeakPath = ppath.stringValue, Type = pt });
+				}
+				else
+				{
+					// drill down into arrays
+					for(int i = 0; i < itr.arraySize; i++)
+                    			{
+						var element = itr.GetArrayElementAtIndex(i);
+						if(element != null && element.serializedObject != null)
+							DoWork(element.serializedObject.targetObject, assetsToReference, validTypes);
+					}
+				}
 			}
 		}
 	}
